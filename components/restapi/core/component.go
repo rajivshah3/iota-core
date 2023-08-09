@@ -16,6 +16,7 @@ import (
 	"github.com/iotaledger/iota-core/pkg/blockfactory"
 	protocolpkg "github.com/iotaledger/iota-core/pkg/protocol"
 	restapipkg "github.com/iotaledger/iota-core/pkg/restapi"
+	iotago "github.com/iotaledger/iota.go/v4"
 )
 
 const (
@@ -161,7 +162,7 @@ func configure() error {
 			return err
 		}
 
-		return responseByHeader(c, block.ProtocolBlock())
+		return responseByHeader(c, block.ProtocolBlock(), block.ProtocolBlock().BlockHeader.ProtocolVersion)
 	})
 
 	routeGroup.GET(RouteBlockMetadata, func(c echo.Context) error {
@@ -255,7 +256,12 @@ func configure() error {
 			return err
 		}
 
-		return responseByHeader(c, output.Output())
+		block, exists := deps.Protocol.MainEngineInstance().Block(output.BlockID())
+		if !exists {
+			return ierrors.Errorf("block not found: %s", block.ID().ToHex())
+		}
+
+		return responseByHeader(c, output.Output(), block.ProtocolBlock().ProtocolVersion)
 	})
 
 	routeGroup.GET(RouteOutputMetadata, func(c echo.Context) error {
@@ -273,7 +279,7 @@ func configure() error {
 			return err
 		}
 
-		return responseByHeader(c, block.ProtocolBlock())
+		return responseByHeader(c, block.ProtocolBlock(), block.ProtocolBlock().BlockHeader.ProtocolVersion)
 	})
 
 	routeGroup.GET(RouteTransactionsIncludedBlockMetadata, func(c echo.Context) error {
@@ -360,17 +366,24 @@ func checkUpcomingUnsupportedProtocolVersion() echo.MiddlewareFunc {
 	}
 }
 
-func responseByHeader(c echo.Context, obj any) error {
+func responseByHeader(c echo.Context, obj any, apiVersion ...iotago.Version) error {
 	mimeType, err := httpserver.GetAcceptHeaderContentType(c, httpserver.MIMEApplicationVendorIOTASerializerV1, echo.MIMEApplicationJSON)
 	if err != nil && err != httpserver.ErrNotAcceptable {
 		return err
 	}
 
+	api := deps.Protocol.CurrentAPI()
+	if len(apiVersion) > 0 {
+		api, err = deps.Protocol.APIForVersion(apiVersion[0])
+		if err != nil {
+			return ierrors.Wrapf(err, "can't get API for version %d in core API", apiVersion[0])
+		}
+	}
+
 	switch mimeType {
 	// TODO: should this maybe already be V2 ?
 	case httpserver.MIMEApplicationVendorIOTASerializerV1:
-		// TODO: that should take the API that belongs to the object
-		b, err := deps.Protocol.CurrentAPI().Encode(obj)
+		b, err := api.Encode(obj)
 		if err != nil {
 			return err
 		}
@@ -379,8 +392,7 @@ func responseByHeader(c echo.Context, obj any) error {
 
 	// default to echo.MIMEApplicationJSON
 	default:
-		// TODO: that should take the API that belongs to the object
-		j, err := deps.Protocol.CurrentAPI().JSONEncode(obj)
+		j, err := api.JSONEncode(obj)
 		if err != nil {
 			return err
 		}

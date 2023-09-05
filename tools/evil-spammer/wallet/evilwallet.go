@@ -14,7 +14,6 @@ import (
 	"github.com/iotaledger/hive.go/runtime/options"
 	iotago "github.com/iotaledger/iota.go/v4"
 	"github.com/iotaledger/iota.go/v4/builder"
-	"github.com/iotaledger/iota.go/v4/tpkg"
 )
 
 const (
@@ -720,8 +719,12 @@ func (e *EvilWallet) makeTransaction(inputs []*Output, outputs iotago.Outputs[io
 		txBuilder.AddOutput(output)
 	}
 
-	randomPayload := tpkg.Rand12ByteArray()
-	txBuilder.AddTaggedDataPayload(&iotago.TaggedData{Tag: randomPayload[:], Data: randomPayload[:]})
+	var tagData string
+	for _, input := range inputs {
+		tagData += "IN " + input.OutputID.ToHex()
+	}
+
+	txBuilder.AddTaggedDataPayload(&iotago.TaggedData{Tag: []byte("EVIL"), Data: []byte(tagData)})
 
 	walletKeys := make([]iotago.AddressKeys, len(inputs))
 	for i, input := range inputs {

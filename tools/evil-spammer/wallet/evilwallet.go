@@ -324,7 +324,7 @@ func (e *EvilWallet) splitOutputs(splitOutput *Output, inputWallet, outputWallet
 
 	input, outputs := e.handleInputOutputDuringSplitOutputs(splitOutput, FaucetRequestSplitNumber, outputWallet)
 
-	tx, err := e.CreateTransaction(WithInputs(input), WithOutputs(outputs), WithIssuer(inputWallet), WithOutputWallet(outputWallet))
+	tx, err := e.CreateTransaction(WithInputs(input), WithOutputs(outputs), WithIssuer(inputWallet), WithOutputWallet(outputWallet), WithPurposeTag("PREP"))
 	if err != nil {
 		return iotago.TransactionID{}, err
 	}
@@ -444,7 +444,7 @@ func (e *EvilWallet) CreateTransaction(options ...Option) (tx *iotago.Transactio
 		}
 	}
 
-	tx, err = e.makeTransaction(inputs, outputs, buildOptions.inputWallet)
+	tx, err = e.makeTransaction(inputs, outputs, buildOptions.inputWallet, buildOptions.purposeTag)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +706,7 @@ func (e *EvilWallet) updateOutputBalances(buildOptions *Options) (err error) {
 	return
 }
 
-func (e *EvilWallet) makeTransaction(inputs []*Output, outputs iotago.Outputs[iotago.Output], w *Wallet) (tx *iotago.Transaction, err error) {
+func (e *EvilWallet) makeTransaction(inputs []*Output, outputs iotago.Outputs[iotago.Output], w *Wallet, purposeTag ...string) (tx *iotago.Transaction, err error) {
 	clt := e.Connector().GetClient()
 
 	txBuilder := builder.NewTransactionBuilder(clt.CurrentAPI())
@@ -719,12 +719,14 @@ func (e *EvilWallet) makeTransaction(inputs []*Output, outputs iotago.Outputs[io
 		txBuilder.AddOutput(output)
 	}
 
-	var tagData string
-	for _, input := range inputs {
-		tagData += "IN " + input.OutputID.ToHex()
-	}
+	if len(purposeTag) > 0 {
+		var tagData string
+		for _, input := range inputs {
+			tagData += "IN " + input.OutputID.ToHex()
+		}
 
-	txBuilder.AddTaggedDataPayload(&iotago.TaggedData{Tag: []byte("EVIL"), Data: []byte(tagData)})
+		txBuilder.AddTaggedDataPayload(&iotago.TaggedData{Tag: []byte(purposeTag[0]), Data: []byte(tagData)})
+	}
 
 	walletKeys := make([]iotago.AddressKeys, len(inputs))
 	for i, input := range inputs {
@@ -768,7 +770,7 @@ func (e *EvilWallet) prepareConflictSliceForScenario(scenario *EvilScenario) (co
 		conflicts := make([][]Option, 0)
 		for _, aliases := range conflictMap {
 			outs := genOutputOptions(aliases.Outputs)
-			option := []Option{WithInputs(aliases.Inputs), WithOutputs(outs), WithOutputBatchAliases(batchOutputs)}
+			option := []Option{WithInputs(aliases.Inputs), WithOutputs(outs), WithOutputBatchAliases(batchOutputs), WithPurposeTag("DS")}
 			if scenario.OutputWallet != nil {
 				option = append(option, WithOutputWallet(scenario.OutputWallet))
 			}

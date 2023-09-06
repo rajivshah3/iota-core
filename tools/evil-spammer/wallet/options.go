@@ -22,6 +22,7 @@ type Options struct {
 	outputBatchAliases map[string]types.Empty
 	reuse              bool
 	issuingTime        time.Time
+	purposeTag         string
 }
 
 type OutputOption struct {
@@ -217,6 +218,12 @@ func WithReuseOutputs() Option {
 func WithIssuingTime(issuingTime time.Time) Option {
 	return func(options *Options) {
 		options.issuingTime = issuingTime
+	}
+}
+
+func WithPurposeTag(purposeTag string) Option {
+	return func(options *Options) {
+		options.purposeTag = purposeTag
 	}
 }
 

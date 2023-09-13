@@ -722,7 +722,7 @@ func (e *EvilWallet) makeTransaction(inputs []*Output, outputs iotago.Outputs[io
 	if len(purposeTag) > 0 {
 		var tagData string
 		for _, input := range inputs {
-			tagData += "IN " + input.OutputID.ToHex()
+			tagData += "IN " + input.OutputID.ToHex() + ","
 		}
 
 		txBuilder.AddTaggedDataPayload(&iotago.TaggedData{Tag: []byte(purposeTag[0]), Data: []byte(tagData)})

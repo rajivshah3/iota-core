@@ -166,6 +166,10 @@ type Client interface {
 	PostTransaction(tx *iotago.Transaction) (iotago.BlockID, error)
 	// PostData sends the given data (payload) by creating a block in the backend.
 	PostData(data []byte) (blkID string, err error)
+	// PostBlock sends the given protocol block.
+	PostBlock(*iotago.ProtocolBlock) (blkID string, err error)
+	// GetBlockConfirmationState returns the AcceptanceState of a given block ID.
+	GetBlockConfirmationState(blkID iotago.BlockID) string
 	// GetTransactionConfirmationState returns the AcceptanceState of a given transaction ID.
 	GetTransactionConfirmationState(txID iotago.TransactionID) string
 	// GetOutput gets the output of a given outputID.
@@ -262,6 +266,20 @@ func (c *WebClient) PostData(data []byte) (blkID string, err error) {
 	return id.ToHex(), nil
 }
 
+// PostBlock sends the given protocol block.
+func (c *WebClient) PostBlock(protoBlk *iotago.ProtocolBlock) (blkID string, err error) {
+	if protoBlk == nil {
+		return
+	}
+
+	id, err := c.client.SubmitBlock(context.Background(), protoBlk)
+	if err != nil {
+		return
+	}
+
+	return id.ToHex(), nil
+}
+
 // GetOutputConfirmationState gets the first unspent outputs of a given address.
 func (c *WebClient) GetOutputConfirmationState(outputID iotago.OutputID) string {
 	txID := outputID.TransactionID()
@@ -277,6 +295,16 @@ func (c *WebClient) GetOutput(outputID iotago.OutputID) iotago.Output {
 	}
 
 	return res
+}
+
+// GetBlockConfirmationState returns the AcceptanceState of a given block ID.
+func (c *WebClient) GetBlockConfirmationState(blkID iotago.BlockID) string {
+	resp, err := c.client.BlockMetadataByBlockID(context.Background(), blkID)
+	if err != nil {
+		return ""
+	}
+
+	return resp.BlockState
 }
 
 // GetTransactionConfirmationState returns the AcceptanceState of a given transaction ID.

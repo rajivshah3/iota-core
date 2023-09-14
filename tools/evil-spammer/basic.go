@@ -22,6 +22,7 @@ type CustomSpamParams struct {
 	Scenario              wallet.EvilBatch
 	DeepSpam              bool
 	EnableRateSetter      bool
+	BlowballSize          int
 
 	config *BasicConfig
 }
@@ -37,7 +38,7 @@ func CustomSpam(params *CustomSpamParams) {
 
 	fundsNeeded := false
 	for _, st := range params.SpamTypes {
-		if st != SpammerTypeBlock {
+		if st != SpammerTypeBlock && st != SpammerTypeBlowball {
 			fundsNeeded = true
 		}
 	}
@@ -60,6 +61,17 @@ func CustomSpam(params *CustomSpamParams) {
 			go func(i int) {
 				defer wg.Done()
 				s := SpamBlocks(w, params.Rates[i], params.TimeUnit, params.Durations[i], params.BlkToBeSent[i], params.EnableRateSetter)
+				if s == nil {
+					return
+				}
+				s.Spam()
+			}(i)
+		case SpammerTypeBlowball:
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+
+				s := SpamBlowball(w, params.Rates[i], params.TimeUnit, params.Durations[i], params.BlowballSize, params.EnableRateSetter)
 				if s == nil {
 					return
 				}
@@ -206,6 +218,28 @@ func SpamBlocks(w *wallet.EvilWallet, rate int, timeUnit, duration time.Duration
 		spammer.WithRateSetter(enableRateSetter),
 		spammer.WithEvilWallet(w),
 		spammer.WithSpammingFunc(spammer.DataSpammingFunction),
+	}
+
+	return spammer.NewSpammer(options...)
+}
+
+func SpamBlowball(w *wallet.EvilWallet, rate int, timeUnit, duration time.Duration, blowballSize int, enableRateSetter bool) *spammer.Spammer {
+	if w.NumOfClient() < 1 {
+		printer.NotEnoughClientsWarning(1)
+	}
+
+	// blowball spammer needs at least 40 seconds to finish
+	if duration < 40*time.Second {
+		duration = 40 * time.Second
+	}
+
+	options := []spammer.Options{
+		spammer.WithSpamRate(rate, timeUnit),
+		spammer.WithSpamDuration(duration),
+		spammer.WithBlowballSize(blowballSize),
+		spammer.WithRateSetter(enableRateSetter),
+		spammer.WithEvilWallet(w),
+		spammer.WithSpammingFunc(spammer.BlowballSpammingFunction),
 	}
 
 	return spammer.NewSpammer(options...)

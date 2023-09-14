@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/iotaledger/hive.go/ierrors"
+	"github.com/iotaledger/hive.go/lo"
 	"github.com/iotaledger/iota-core/tools/evil-spammer/wallet"
 	iotago "github.com/iotaledger/iota.go/v4"
+	"github.com/iotaledger/iota.go/v4/builder"
 )
 
 func DataSpammingFunction(s *Spammer) {
@@ -28,6 +30,47 @@ func DataSpammingFunction(s *Spammer) {
 	if count%int64(s.SpamDetails.Rate*2) == 0 {
 		s.log.Debugf("Last sent block, ID: %s; blkCount: %d", blkID, count)
 	}
+	s.State.batchPrepared.Add(1)
+	s.CheckIfAllSent()
+}
+
+func BlowballSpammingFunction(s *Spammer) {
+	clt := s.Clients.GetClient()
+	// sleep randomly to avoid issuing blocks in different goroutines at once
+	//nolint:gosec
+	time.Sleep(time.Duration(rand.Float64()*20) * time.Millisecond)
+
+	centerID, err := createBlowBallCenter(s)
+	if err != nil {
+		s.log.Errorf("failed to performe blowball attack", err)
+		return
+	}
+	// wait for the center block to be an old confirmed block
+	time.Sleep(30 * time.Second)
+
+	blowballs := createBlowBall(centerID, s)
+
+	wg := sync.WaitGroup{}
+	for _, blk := range blowballs {
+		// send transactions in parallel
+		wg.Add(1)
+		go func(clt wallet.Client, blk *iotago.ProtocolBlock) {
+			defer wg.Done()
+
+			// sleep randomly to avoid issuing blocks in different goroutines at once
+			//nolint:gosec
+			time.Sleep(time.Duration(rand.Float64()*100) * time.Millisecond)
+
+			id, err := clt.PostBlock(blk)
+			if err != nil {
+				s.log.Error("ereror to send blowball blocks")
+				return
+			}
+			s.log.Infof("blowball sent, ID: %s", id)
+		}(clt, blk)
+	}
+	wg.Wait()
+
 	s.State.batchPrepared.Add(1)
 	s.CheckIfAllSent()
 }
@@ -122,3 +165,55 @@ func CustomConflictSpammingFunc(s *Spammer) {
 // 	s.State.batchPrepared.Add(1)
 // 	s.CheckIfAllSent()
 // }
+
+func createBlowBallCenter(s *Spammer) (iotago.BlockID, error) {
+	clt := s.Clients.GetClient()
+
+	centerIDHex, err := clt.PostData([]byte("PREP"))
+	if err != nil {
+		s.ErrCounter.CountError(ErrFailSendDataBlock)
+		s.log.Error(err)
+	}
+	centerID := lo.Return1(iotago.SlotIdentifierFromHexString(centerIDHex))
+
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			state := clt.GetBlockConfirmationState(centerID)
+			if state == "confirmed" {
+				return centerID, nil
+			}
+		case <-timer.C:
+			return iotago.EmptyBlockID(), ierrors.Errorf("failed to confirm center block")
+		}
+	}
+}
+
+func createBlowBall(center iotago.BlockID, s *Spammer) []*iotago.ProtocolBlock {
+	blowBallBlocks := make([]*iotago.ProtocolBlock, 0)
+	for i := 0; i < s.SpamDetails.BlowballSize; i++ {
+		blk := createSideBlock(center, s)
+		blowBallBlocks = append(blowBallBlocks, blk)
+	}
+	return blowBallBlocks
+}
+
+func createSideBlock(parent iotago.BlockID, s *Spammer) *iotago.ProtocolBlock {
+	// create a new message
+	blockBuilder := builder.NewBasicBlockBuilder(s.Clients.GetClient().CurrentAPI())
+	blockBuilder.
+		IssuingTime(time.Time{}).
+		StrongParents(iotago.BlockIDs{parent}).
+		Payload(&iotago.TaggedData{Tag: []byte("DS")})
+
+	blk, err := blockBuilder.Build()
+	if err != nil {
+		return nil
+	}
+
+	return blk
+}

@@ -38,6 +38,19 @@ func WithSpamDuration(maxDuration time.Duration) Options {
 	}
 }
 
+// WithBlowballSize provides spammer with options regarding blowball size.
+func WithBlowballSize(size int) Options {
+	return func(s *Spammer) {
+		if s.SpamDetails == nil {
+			s.SpamDetails = &SpamDetails{
+				BlowballSize: size,
+			}
+		} else {
+			s.SpamDetails.BlowballSize = size
+		}
+	}
+}
+
 // WithErrorCounter allows for setting an error counter object, if not provided a new instance will be created.
 func WithErrorCounter(errCounter *ErrorCounter) Options {
 	return func(s *Spammer) {
@@ -157,6 +170,7 @@ type SpamDetails struct {
 	TimeUnit       time.Duration
 	MaxDuration    time.Duration
 	MaxBatchesSent int
+	BlowballSize   int
 }
 
 type CommitmentSpamDetails struct {

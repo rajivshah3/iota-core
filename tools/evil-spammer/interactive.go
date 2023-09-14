@@ -32,6 +32,7 @@ const (
 	AnswerDisable = "disable"
 
 	SpammerTypeBlock       = "blk"
+	SpammerTypeBlowball    = "bb"
 	SpammerTypeTx          = "tx"
 	SpammerTypeDs          = "ds"
 	SpammerTypeCustom      = "custom"

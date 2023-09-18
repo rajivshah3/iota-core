@@ -1,6 +1,7 @@
 package spammer
 
 import (
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -47,6 +48,7 @@ func BlowballSpammingFunction(s *Spammer) {
 	}
 	// wait for the center block to be an old confirmed block
 	time.Sleep(30 * time.Second)
+	fmt.Println(centerID.ToHex())
 
 	blowballs := createBlowBall(centerID, s)
 
@@ -195,7 +197,10 @@ func createBlowBallCenter(s *Spammer) (iotago.BlockID, error) {
 
 func createBlowBall(center iotago.BlockID, s *Spammer) []*iotago.ProtocolBlock {
 	blowBallBlocks := make([]*iotago.ProtocolBlock, 0)
-	for i := 0; i < s.SpamDetails.BlowballSize; i++ {
+	// default to 30, if blowball size is not set
+	size := lo.Max(s.SpamDetails.BlowballSize, 30)
+
+	for i := 0; i < size; i++ {
 		blk := createSideBlock(center, s)
 		blowBallBlocks = append(blowBallBlocks, blk)
 	}

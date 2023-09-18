@@ -28,6 +28,7 @@ var (
 		Scenario:              wallet.Scenario1(),
 		DeepSpam:              false,
 		EnableRateSetter:      false,
+		BlowballSize:          30,
 	}
 	quickTestParams = QuickTestParams{
 		ClientURLs:            urls,

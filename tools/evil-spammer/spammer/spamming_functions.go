@@ -1,7 +1,6 @@
 package spammer
 
 import (
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -48,7 +47,6 @@ func BlowballSpammingFunction(s *Spammer) {
 	}
 	// wait for the center block to be an old confirmed block
 	time.Sleep(30 * time.Second)
-	fmt.Println(centerID.ToHex())
 
 	blowballs := createBlowBall(centerID, s)
 

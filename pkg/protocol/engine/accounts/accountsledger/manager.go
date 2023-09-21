@@ -8,6 +8,7 @@ import (
 	"github.com/iotaledger/hive.go/ds/shrinkingmap"
 	"github.com/iotaledger/hive.go/ierrors"
 	"github.com/iotaledger/hive.go/kvstore"
+	"github.com/iotaledger/hive.go/lo"
 	"github.com/iotaledger/hive.go/runtime/module"
 	"github.com/iotaledger/hive.go/runtime/options"
 	"github.com/iotaledger/hive.go/runtime/syncutils"
@@ -200,6 +201,11 @@ func (m *Manager) Account(accountID iotago.AccountID, targetIndex iotago.SlotInd
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
+	return m.account(accountID, targetIndex)
+
+}
+
+func (m *Manager) account(accountID iotago.AccountID, targetIndex iotago.SlotIndex) (accountData *accounts.AccountData, exists bool, err error) {
 	// if m.latestCommittedSlot < maxCommittableAge we should have all history
 	maxCommittableAge := m.apiProvider.APIForSlot(targetIndex).ProtocolParameters().MaxCommittableAge()
 	if m.latestCommittedSlot >= maxCommittableAge && targetIndex+maxCommittableAge < m.latestCommittedSlot {
@@ -264,6 +270,48 @@ func (m *Manager) PastAccounts(accountIDs iotago.AccountIDs, targetIndex iotago.
 	}
 
 	return result, nil
+}
+
+func (m *Manager) Rollback(targetIndex iotago.SlotIndex) error {
+	for index := m.latestCommittedSlot; index > targetIndex; index-- {
+		slotDiff := lo.PanicOnErr(m.slotDiff(index))
+		var internalErr error
+
+		if err := slotDiff.Stream(func(accountID iotago.AccountID, accountDiff *model.AccountDiff, destroyed bool) bool {
+			accountData, exists, err := m.accountsTree.Get(accountID)
+			if err != nil {
+				internalErr = ierrors.Wrapf(err, "unable to retrieve account %s to rollback in slot %d", accountID, index)
+
+				return false
+			}
+
+			if !exists {
+				accountData = accounts.NewAccountData(accountID)
+			}
+
+			if _, err := m.rollbackAccountTo(accountData, targetIndex); err != nil {
+				internalErr = ierrors.Wrapf(err, "unable to rollback account %s to target slot index %d", accountID, targetIndex)
+
+				return false
+			}
+
+			if err := m.accountsTree.Set(accountID, accountData); err != nil {
+				internalErr = ierrors.Wrapf(err, "failed to save rolled back account %s to target slot index %d", accountID, targetIndex)
+
+				return false
+			}
+
+			return true
+		}); err != nil {
+			return ierrors.Wrapf(err, "error in streaming account diffs for slot %s", index)
+		}
+
+		if internalErr != nil {
+			return ierrors.Wrapf(internalErr, "error in rolling back account for slot %s", index)
+		}
+	}
+
+	return nil
 }
 
 // AddAccount adds a new account to the Account tree, allotting to it the balance on the given output.
@@ -412,8 +460,9 @@ func (m *Manager) preserveDestroyedAccountData(accountID iotago.AccountID) (acco
 
 func (m *Manager) computeBlockBurnsForSlot(slotIndex iotago.SlotIndex, rmc iotago.Mana) (burns map[iotago.AccountID]iotago.Mana, err error) {
 	burns = make(map[iotago.AccountID]iotago.Mana)
+	validationBlockCount := make(map[iotago.AccountID]int)
+	apiForSlot := m.apiProvider.APIForSlot(slotIndex)
 	if set, exists := m.blockBurns.Get(slotIndex); exists {
-		// Get RMC for this slot
 		for it := set.Iterator(); it.HasNext(); {
 			blockID := it.Next()
 			block, blockLoaded := m.block(blockID)
@@ -422,6 +471,24 @@ func (m *Manager) computeBlockBurnsForSlot(slotIndex iotago.SlotIndex, rmc iotag
 			}
 			if _, isBasicBlock := block.BasicBlock(); isBasicBlock {
 				burns[block.ProtocolBlock().IssuerID] += iotago.Mana(block.WorkScore()) * rmc
+			} else if _, isValidationBlock := block.ValidationBlock(); isValidationBlock {
+				validationBlockCount[block.ProtocolBlock().IssuerID]++
+			}
+		}
+		validationBlocksPerSlot := int(apiForSlot.ProtocolParameters().ValidationBlocksPerSlot())
+		for accountID, count := range validationBlockCount {
+			if count > validationBlocksPerSlot {
+				// penalize over-issuance
+				accountData, exists, err := m.account(accountID, m.latestCommittedSlot)
+				if !exists {
+					return nil, ierrors.Wrapf(err, "cannot compute penalty for over-issuing validator, account %s could not be retrieved", accountID)
+				}
+				punishmentEpochs := apiForSlot.ProtocolParameters().PunishmentEpochs()
+				manaPunishment, err := apiForSlot.ManaDecayProvider().ManaGenerationWithDecay(accountData.ValidatorStake, slotIndex, slotIndex+apiForSlot.TimeProvider().EpochDurationSlots()*iotago.SlotIndex(punishmentEpochs))
+				if err != nil {
+					return nil, ierrors.Wrapf(err, "cannot compute penalty for over-issuing validator with account ID %s due to problem with mana generation", accountID)
+				}
+				burns[accountID] += iotago.Mana(count-validationBlocksPerSlot) * manaPunishment
 			}
 		}
 	}

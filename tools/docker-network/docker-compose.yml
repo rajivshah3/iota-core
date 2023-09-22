@@ -43,6 +43,15 @@ services:
     networks:
       - iota-core
 
+  inx-mqtt:
+    image: iotaledger/inx-mqtt:2.0-alpha
+    stop_grace_period: 1m
+    command:
+      - "--inx.address=peer_master:9029"
+      - "--mqtt.websocket.bindAddress=inx-mqtt:1888"
+    networks:
+      - iota-core
+
   peer_master2:
     image: docker-network-peer_master:latest
     stop_grace_period: 1m

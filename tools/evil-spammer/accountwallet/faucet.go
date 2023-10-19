@@ -249,25 +249,12 @@ func (f *faucet) createFaucetTransactionNoManaHandling(receiveAddr iotago.Addres
 		Input:        f.unspentOutput.OutputStruct,
 	})
 
-	switch receiveAddr.(type) {
-	case *iotago.Ed25519Address:
-		txBuilder.AddOutput(&iotago.BasicOutput{
-			Amount: amount,
-			Conditions: iotago.BasicOutputUnlockConditions{
-				&iotago.AddressUnlockCondition{Address: receiveAddr},
-			},
-		})
-	case *iotago.ImplicitAccountCreationAddress:
-		log.Infof("creating account %s", receiveAddr)
-		accOutputBuilder := builder.NewAccountOutputBuilder(receiveAddr, receiveAddr, amount)
-		output, err := accOutputBuilder.Build()
-		if err != nil {
-			log.Errorf("failed to build account output: %s", err)
-
-			return nil, 0, err
-		}
-		txBuilder.AddOutput(output)
-	}
+	txBuilder.AddOutput(&iotago.BasicOutput{
+		Amount: amount,
+		Conditions: iotago.BasicOutputUnlockConditions{
+			&iotago.AddressUnlockCondition{Address: receiveAddr},
+		},
+	})
 
 	// remainder output
 	remainderIndex := 1

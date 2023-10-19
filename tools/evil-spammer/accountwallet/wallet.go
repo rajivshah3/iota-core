@@ -252,16 +252,14 @@ func (a *AccountWallet) isAccountReady(accData *models.AccountData) bool {
 }
 
 func (a *AccountWallet) getFunds(amount uint64, addressType iotago.AddressType) (*models.Output, ed25519.PrivateKey, error) {
-	hdWallet := mock.NewHDWallet("", a.seed[:], a.latestUsedIndex+1)
-	privKey, _ := hdWallet.KeyPair()
-	receiverAddr := hdWallet.Address(addressType)
+	receiverAddr, privKey, usedIndex := a.getAddress(addressType)
+
 	createdOutput, err := a.RequestFaucetFunds(a.client, receiverAddr, iotago.BaseToken(amount))
 	if err != nil {
 		return nil, nil, ierrors.Wrap(err, "failed to request funds from Faucet")
 	}
 
-	a.latestUsedIndex++
-	createdOutput.Index = a.latestUsedIndex
+	createdOutput.Index = usedIndex
 
 	return createdOutput, privKey, nil
 }

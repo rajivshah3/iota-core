@@ -1,9 +1,11 @@
 package accountwallet
 
 import (
+	"crypto/ed25519"
 	"fmt"
 
 	"github.com/iotaledger/hive.go/ierrors"
+	"github.com/iotaledger/iota-core/pkg/testsuite/mock"
 	iotago "github.com/iotaledger/iota.go/v4"
 )
 
@@ -18,6 +20,16 @@ func (a *AccountWallet) CreateAccount(params *CreateAccountParams) (iotago.Accou
 	fmt.Printf("Created account %s with %d tokens\n", accountID.ToHex(), params.Amount)
 
 	return accountID, nil
+}
+
+func (a *AccountWallet) getAddress(addressType iotago.AddressType) (iotago.DirectUnlockableAddress, ed25519.PrivateKey, uint64) {
+	hdWallet := mock.NewHDWallet("", a.seed[:], a.latestUsedIndex+1)
+	privKey, _ := hdWallet.KeyPair()
+	receiverAddr := hdWallet.Address(addressType)
+
+	a.latestUsedIndex++
+
+	return receiverAddr, privKey, a.latestUsedIndex - 1
 }
 
 func (a *AccountWallet) DestroyAccount(params *DestroyAccountParams) error {

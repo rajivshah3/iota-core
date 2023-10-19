@@ -254,6 +254,7 @@ func (f *faucet) createFaucetTransactionNoManaHandling(receiveAddr iotago.Addres
 		Conditions: iotago.BasicOutputUnlockConditions{
 			&iotago.AddressUnlockCondition{Address: receiveAddr},
 		},
+		Features: iotago.BasicOutputFeatures{},
 	})
 
 	// remainder output
